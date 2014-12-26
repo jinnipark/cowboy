@@ -13,12 +13,12 @@
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 -module(cowboy_spdy).
+-behavior(ranch_protocol).
 
 %% API.
--export([start_link/4]).
+-export([init/4]).
 
 %% Internal.
--export([init/5]).
 -export([system_continue/3]).
 -export([system_terminate/4]).
 -export([system_code_change/4]).
@@ -74,10 +74,18 @@
 
 %% API.
 
--spec start_link(any(), inet:socket(), module(), any()) -> {ok, pid()}.
-start_link(Ref, Socket, Transport, Opts) ->
-	proc_lib:start_link(?MODULE, init,
-		[self(), Ref, Socket, Transport, Opts]).
+-spec init(ranch:ref(), inet:socket(), module(), opts()) -> ok.
+init(Ref, Socket, Transport, Opts) ->
+	process_flag(trap_exit, true),
+	{ok, Peer} = Transport:peername(Socket),
+	Middlewares = get_value(middlewares, Opts, [cowboy_router, cowboy_handler]),
+	Env = [{listener, Ref}|get_value(env, Opts, [])],
+	OnResponse = get_value(onresponse, Opts, undefined),
+	Zdef = cow_spdy:deflate_init(),
+	Zinf = cow_spdy:inflate_init(),
+	loop(#state{parent=ranch_server:get_connections_sup(Ref), socket=Socket, transport=Transport,
+		middlewares=Middlewares, env=Env,
+		onresponse=OnResponse, peer=Peer, zdef=Zdef, zinf=Zinf}).
 
 %% Internal.
 
@@ -87,21 +95,6 @@ get_value(Key, Opts, Default) ->
 		{_, Value} -> Value;
 		_ -> Default
 	end.
-
--spec init(pid(), ranch:ref(), inet:socket(), module(), opts()) -> ok.
-init(Parent, Ref, Socket, Transport, Opts) ->
-	process_flag(trap_exit, true),
-	ok = proc_lib:init_ack(Parent, {ok, self()}),
-	{ok, Peer} = Transport:peername(Socket),
-	Middlewares = get_value(middlewares, Opts, [cowboy_router, cowboy_handler]),
-	Env = [{listener, Ref}|get_value(env, Opts, [])],
-	OnResponse = get_value(onresponse, Opts, undefined),
-	Zdef = cow_spdy:deflate_init(),
-	Zinf = cow_spdy:inflate_init(),
-	ok = ranch:accept_ack(Ref),
-	loop(#state{parent=Parent, socket=Socket, transport=Transport,
-		middlewares=Middlewares, env=Env,
-		onresponse=OnResponse, peer=Peer, zdef=Zdef, zinf=Zinf}).
 
 loop(State=#state{parent=Parent, socket=Socket, transport=Transport,
 		buffer=Buffer, children=Children}) ->

@@ -55,6 +55,30 @@ handle_event({error_report, _, {_, crash_report,
 %%
 %% The emulator always sends strings for errors, which makes it very
 %% difficult to extract the information we need, hence the regexps.
+handle_event(Event = {error_report, GL,
+              {Pid, crash_report,
+              	[[{initial_call, _},
+	              	{pid, Pid},
+	              	{registered_name, _},
+	              	{error_info,
+	              		{error,
+	              			[{reason, _},
+	              			 {mfa, _},
+	              			 {stacktrace, [{M, F, A, _} | _]} |
+	              			 _], _}} |
+	              	_] |
+	              _]}},
+             State)
+		when node(GL) =:= node() ->
+	A2 = if is_list(A) -> length(A); true -> A end,
+	Crash = {Pid, M, F, A2},
+	case lists:member(Crash, State) of
+		true ->
+			{ok, lists:delete(Crash, State)};
+		false ->
+			write_event(Event),
+			{ok, State}
+	end;
 handle_event(Event = {error, GL, {emulator, _, Msg}}, State)
 		when node(GL) =:= node() ->
 	Result = re:run(Msg,
@@ -87,9 +111,14 @@ handle_event(Event = {error, GL, {emulator, _, Msg}}, State)
 			end
 	end;
 handle_event(Event = {error, GL,
-		{_, "Ranch listener" ++ _, [_, _, Pid, {[_, _,
-			{stacktrace, [{M, F, A, _}|_]}|_], _}]}},
-		State) when node(GL) =:= node() ->
+							{_,
+							 "Ranch listener" ++ _,
+							 [_, _, Pid,
+							  [{reason, _},
+							   {mfa, _},
+								 {stacktrace, [{M, F, A, _}|_]}|
+								 _]]}}, State)
+		when node(GL) =:= node() ->
 	A2 = if is_list(A) -> length(A); true -> A end,
 	Crash = {Pid, M, F, A2},
 	case lists:member(Crash, State) of

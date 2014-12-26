@@ -14,12 +14,12 @@
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 -module(cowboy_protocol).
+-behavior(ranch_protocol).
 
 %% API.
--export([start_link/4]).
+-export([init/4]).
 
 %% Internal.
--export([init/4]).
 -export([parse_request/3]).
 -export([resume/6]).
 
@@ -58,20 +58,6 @@
 
 %% API.
 
--spec start_link(ranch:ref(), inet:socket(), module(), opts()) -> {ok, pid()}.
-start_link(Ref, Socket, Transport, Opts) ->
-	Pid = spawn_link(?MODULE, init, [Ref, Socket, Transport, Opts]),
-	{ok, Pid}.
-
-%% Internal.
-
-%% Faster alternative to proplists:get_value/3.
-get_value(Key, Opts, Default) ->
-	case lists:keyfind(Key, 1, Opts) of
-		{_, Value} -> Value;
-		_ -> Default
-	end.
-
 -spec init(ranch:ref(), inet:socket(), module(), opts()) -> ok.
 init(Ref, Socket, Transport, Opts) ->
 	Compress = get_value(compress, Opts, false),
@@ -85,7 +71,6 @@ init(Ref, Socket, Transport, Opts) ->
 	Env = [{listener, Ref}|get_value(env, Opts, [])],
 	OnResponse = get_value(onresponse, Opts, undefined),
 	Timeout = get_value(timeout, Opts, 5000),
-	ok = ranch:accept_ack(Ref),
 	wait_request(<<>>, #state{socket=Socket, transport=Transport,
 		middlewares=Middlewares, compress=Compress, env=Env,
 		max_empty_lines=MaxEmptyLines, max_keepalive=MaxKeepalive,
@@ -93,6 +78,15 @@ init(Ref, Socket, Transport, Opts) ->
 		max_header_name_length=MaxHeaderNameLength,
 		max_header_value_length=MaxHeaderValueLength, max_headers=MaxHeaders,
 		onresponse=OnResponse, timeout=Timeout, until=until(Timeout)}, 0).
+
+%% Internal.
+
+%% Faster alternative to proplists:get_value/3.
+get_value(Key, Opts, Default) ->
+	case lists:keyfind(Key, 1, Opts) of
+		{_, Value} -> Value;
+		_ -> Default
+	end.
 
 -spec until(timeout()) -> non_neg_integer() | infinity.
 until(infinity) ->

@@ -13,8 +13,10 @@ PLT_APPS = crypto public_key ssl
 # Dependencies.
 
 DEPS = cowlib ranch
+dep_ranch = git https://github.com/jinnipark/ranch.git master
 TEST_DEPS = ct_helper gun
 dep_ct_helper = git https://github.com/extend/ct_helper.git master
+dep_gun = git https://github.com/jinnipark/gun.git master
 
 # Standard targets.
 
